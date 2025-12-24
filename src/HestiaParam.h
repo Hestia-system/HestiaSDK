@@ -92,5 +92,7 @@ private:
     } validators;
 
     String pattern = "anything";   // schema pattern (ip, hostname, bool, …)
-};
 
+    // ---- max 15 characters for nvskey ----
+    static String nvsKey(const String &jsonKey);
+};

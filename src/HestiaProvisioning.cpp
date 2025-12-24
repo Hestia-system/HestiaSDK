@@ -1,5 +1,5 @@
 
-
+#include <ArduinoJson.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -42,7 +42,7 @@ namespace Provisioning {
   static WebServer server(80);       ///< HTTP provisioning server
   static bool formSaved = false;     ///< Set to true when /save completes successfully
   static JsonArray schemaParams;     ///< R2: DeviceParams schema array (used by handleSave)
-
+  static DynamicJsonDocument schemaDoc(8192);
 
   // ======================================================================================
   //  buildHtmlForm() — HTML Form Generator
@@ -320,6 +320,8 @@ namespace Provisioning {
    */
   void handleSave(bool force) {
 
+    Serial.println("[Provisioning] handleSave() ENTER");
+
       // Iterate over DeviceParams (R2 JSON schema)
       for (JsonObject meta : schemaParams) {
 
@@ -345,6 +347,7 @@ namespace Provisioning {
               "<h3>Forced configuration saved.</h3>"
               "<p>The device will reboot into provisioning mode.</p>");
           formSaved = true;
+          Serial.println("[Provisioning] handleSave() EXIT → reboot");
           delay(2000);
           ESP.restart();
       } 
@@ -354,6 +357,7 @@ namespace Provisioning {
               "<h3>Configuration saved successfully.</h3>"
               "<p>The device will reboot automatically.</p>");
           formSaved = true;
+          Serial.println("[Provisioning] handleSave() EXIT → reboot");
           delay(2000);
           ESP.restart();
       }
@@ -392,13 +396,18 @@ namespace Provisioning {
 
       Serial.println("=== PROVISIONING MODE ===");
 
-      // Parse the R2 JSON schema
-      DynamicJsonDocument doc(8192);
-      deserializeJson(doc, jsonSchema);
-
-      // Make schema globally available
-      JsonArray arr = doc.as<JsonArray>();
-      schemaParams = arr;
+      // Parse the R2 JSON schema (persistent storage)
+      schemaDoc.clear();
+      //deserializeJson(schemaDoc, jsonSchema);
+      deserializeJson(schemaDoc, jsonSchema, DeserializationOption::NestingLimit(10));
+      JsonArray arr = schemaDoc["params"].as<JsonArray>();
+      if (arr.isNull()) {
+          Serial.println("[Provisioning] ERROR: 'params' array not found in schema");
+      } else {
+          schemaParams = arr;
+      }
+      Serial.printf("[Provisioning] schema params count = %u\n",
+              (unsigned)schemaParams.size());
 
       // --- Wi-Fi Access Point ------------------------------------------------------------
       WiFi.mode(WIFI_AP);

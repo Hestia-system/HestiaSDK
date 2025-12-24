@@ -86,11 +86,13 @@ void HestiaParam::loadFromNVS(bool lazyInit)
     Preferences prefs;
     prefs.begin(NAMESPACE, false);
 
-    if (prefs.isKey(key.c_str())) {
-        _value = prefs.getString(key.c_str(), _value);
+    String k = HestiaParam::nvsKey(key);
+
+    if (prefs.isKey(k.c_str())) {
+        _value = prefs.getString(k.c_str(), _value);
     }
     else if (lazyInit) {
-        prefs.putString(key.c_str(), _value);
+        prefs.putString(k.c_str(), _value);
     }
 
     prefs.end();
@@ -109,7 +111,8 @@ void HestiaParam::saveToNVS()
 {
     Preferences prefs;
     prefs.begin(NAMESPACE, false);
-    prefs.putString(key.c_str(), _value);
+    String k = HestiaParam::nvsKey(key);
+    prefs.putString(k.c_str(), _value);
     prefs.end();
 }
 
@@ -125,62 +128,35 @@ bool HestiaParam::write(const String& v)
     x.trim();
 
     // -----------------------------------------------------
-    // 1) Normalisation booléenne
+    // 1) Normalisation booléenne (optionnelle mais utile)
     // -----------------------------------------------------
-    String low = x;
-    low.toLowerCase();
+    if (type == "bool") {
+        String low = x;
+        low.toLowerCase();
 
-    if (low == "true" || low == "on" || low == "1") {
-        _value = "true";
-        return true;
-    }
-
-    if (low == "false" || low == "off" || low == "0") {
-        _value = "false";
-        return true;
-    }
-
-    // -----------------------------------------------------
-    // 2) Normalisation numérique (float-like detection)
-    // -----------------------------------------------------
-    bool digitSeen = false;
-    bool dotSeen   = false;
-    bool signSeen  = false;
-
-    for (size_t i = 0; i < x.length(); ++i) {
-        char c = x[i];
-
-        if (c == '-' && i == 0 && !signSeen) {
-            signSeen = true;
-            continue;
+        if (low == "true" || low == "on" || low == "1") {
+            _value = "true";
+            return true;
         }
 
-        if (c == '.') {
-            if (dotSeen) { dotSeen = false; break; }
-            dotSeen = true;
-            continue;
+        if (low == "false" || low == "off" || low == "0") {
+            _value = "false";
+            return true;
         }
 
-        if (c < '0' || c > '9') {
-            digitSeen = false;
-            break;
-        }
-
-        digitSeen = true;
-    }
-
-    if (digitSeen) {
-        double val = atof(x.c_str());
-        _value = formatNumber(val);    // <-- applique decimals automatiquement
+        // toute autre valeur bool est acceptée telle quelle
+        // la validation décidera
+        _value = x;
         return true;
     }
 
     // -----------------------------------------------------
-    // 3) Normalisation baseline (string “clean”)
+    // 2) Tous les autres types : stockage brut
     // -----------------------------------------------------
     _value = x;
     return true;
 }
+
 
 
 
@@ -328,4 +304,19 @@ bool HestiaParam::validate(const String& candidate) const
 bool HestiaParam::validateValue() const
 {
     return validate(_value);
+}
+
+/**
+ * ============================================================================
+ *  NVSKEY: max 15 characters
+ * ============================================================================
+ */
+String HestiaParam::nvsKey(const String& jsonKey)
+{
+    // Limite NVS = 15 caractères (ESP-IDF)
+    if (jsonKey.length() <= 15)
+        return jsonKey;
+
+    // Compatibilité R1 : garder les 15 derniers caractères
+    return jsonKey.substring(jsonKey.length() - 15);
 }
