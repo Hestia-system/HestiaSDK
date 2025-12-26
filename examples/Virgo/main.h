@@ -63,7 +63,7 @@ static const BridgeConfig bridge_config[] PROGMEM = {
     
     { "IotBridge_restartLog",
       TypeHA::HA_ENTITIES,
-      "VIot/restartLog/toHESTIASDK",
+      "HA/restartLog/toHESTIASDK",
       "",
       "",
       "false"

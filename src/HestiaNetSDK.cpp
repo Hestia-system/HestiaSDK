@@ -366,27 +366,63 @@ namespace HestiaNet {
  *****************************************************************************************/
 void MQTTDiscovery() {
 
-    Serial.println(F("\n=== [HestiaNet | MQTT Discovery] Publishing HA device config ==="));
+        Serial.println(F("\n=== [HestiaNet | MQTT Discovery] Publishing HA device config ==="));
 
+    // ---------------------------------------------------------------------
+    // 0) Guards
+    // ---------------------------------------------------------------------
     if (!client.connected()) {
         Serial.println(F("[HestiaNet | MQTT Discovery] ✖ MQTT offline, aborting"));
         return;
     }
 
     if (!g_discoveryJson) {
-        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ No injected JSON"));
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ No injected discovery JSON"));
         return;
     }
 
     // ---------------------------------------------------------------------
-    // Convert PROGMEM → RAM string
+    // 1) Convert PROGMEM → RAM (String)
     // ---------------------------------------------------------------------
     String payload;
-    payload.reserve(strlen_P(g_discoveryJson));
+    size_t len = strlen_P(g_discoveryJson);
+    payload.reserve(len);
 
-    for (size_t i = 0; i < strlen_P(g_discoveryJson); i++) {
+    for (size_t i = 0; i < len; i++) {
         payload += (char)pgm_read_byte_near(g_discoveryJson + i);
     }
+
+    // ---------------------------------------------------------------------
+    // 2) JSON syntax validation
+    // ---------------------------------------------------------------------
+    DynamicJsonDocument doc(8192);
+    DeserializationError err = deserializeJson(doc, payload);
+
+    if (err) {
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Invalid discovery JSON"));
+        Serial.print(F("[HestiaNet | MQTT Discovery] Error: "));
+        Serial.println(err.c_str());
+        Serial.println(F("[HestiaNet | MQTT Discovery] Raw payload:"));
+        Serial.println(payload);
+        return;
+    }
+
+    // ---------------------------------------------------------------------
+    // 3) Minimal Home Assistant structure sanity checks
+    // ---------------------------------------------------------------------
+    if (!doc.containsKey("device")) {
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing 'device' object"));
+        return;
+    }
+
+    if (!doc.containsKey("name") && !doc.containsKey("unique_id")) {
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing 'name' or 'unique_id'"));
+        return;
+    }
+
+    // NOTE:
+    // We intentionally do NOT enforce HA component-specific fields
+    // (stat_t, cmd_t, etc.) here. This will be handled by the generator.
 
     // ---------------------------------------------------------------------
     // Build Home Assistant discovery topic

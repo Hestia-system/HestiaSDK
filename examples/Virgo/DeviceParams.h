@@ -171,7 +171,7 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "provisioning": false,
       "required": true,
       "critical": false,
-      "default": "V1.1.4",
+      "default": "V1.1.5",
       "decimals": 0,
       "pattern": "anything",
       "validate": { "minLen": 1, "maxLen": 16 }
@@ -391,5 +391,3 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
 #define PARAM_MQTT_FLUSH_WINDOW  (HestiaConfig::getParamObj("mqtt_flush_window"))
 #define PARAM_DEVICE_ID          (HestiaConfig::getParamObj("device_id"))
 #define PARAM_HA_LOG_TOPIC       (HestiaConfig::getParamObj("ha_log_topic"))
-#define PARAM_PIN_PROV           (HestiaConfig::getParamObj("pin_provisioning"))
-#define PARAM_PROV_HOLD_MS       (HestiaConfig::getParamObj("prov_hold_ms"))
