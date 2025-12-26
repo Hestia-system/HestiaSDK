@@ -145,13 +145,23 @@ static const char config_json[] PROGMEM = R"rawliteral(
       "p": "sensor",
       "name": "ip",
       "unique_id": "Virgo_IP Address",
-      "stat_t": "Virgo/ip/toHA"
+      "stat_t": "Virgo/ip/toHA",
+        "availability": [
+        {
+          "topic": "Virgo/availability"
+        }
+      ]
     },
     "log": {
       "p": "sensor",
       "name": "log",
       "unique_id": "Virgo_log",
-      "stat_t": "Virgo/log/toHA"
+      "stat_t": "Virgo/log/toHA",
+        "availability": [
+        {
+          "topic": "Virgo/availability"
+        }
+      ]
     },
     "iotHeartbeat": {
       "p": "sensor",
@@ -163,7 +173,12 @@ static const char config_json[] PROGMEM = R"rawliteral(
       "p": "sensor",
       "name": "SW_version",
       "unique_id": "Virgo_SW_version",
-      "stat_t": "Virgo/SW_version/toHA"
+      "stat_t": "Virgo/SW_version/toHA",
+        "availability": [
+        {
+          "topic": "Virgo/availability"
+        }
+      ]
     },
     "OTA": {
       "p": "button",
@@ -171,7 +186,12 @@ static const char config_json[] PROGMEM = R"rawliteral(
       "icon": "mdi:cellphone-arrow-down",
       "unique_id": "Virgo_OTA2",
       "stat_t": "Virgo/OTA/toHA",
-      "cmd_t": "Virgo/OTA/fromHA"
+      "cmd_t": "Virgo/OTA/fromHA",
+        "availability": [
+        {
+          "topic": "Virgo/availability"
+        }
+      ]
     }
   }
 }

@@ -79,13 +79,41 @@ namespace HestiaCore {
   void RegisterEntitiesIotBridge();
 
   /**
-   * @brief Perform core runtime initialization:
-   *        - Minimal hardware initialization
-   *        - Instantiation of all HAIoTBridge entities
+   * @brief Perform Hestia core runtime initialization.
    *
-   * Should be called early in setup().
+   * This function initializes all infrastructure-level components of the
+   * Hestia SDK. It must be called once, early in setup().
+   *
+   * Responsibilities:
+   *   - Minimal hardware initialization (UART, timers, safe defaults)
+   *   - Load DeviceParams R2 JSON schema into HestiaConfig
+   *   - Validate configuration and decide provisioning mode
+   *     (may enter provisioning and never return)
+   *   - Initialize watchdog (after provisioning only)
+   *   - Load bridge configuration and HA discovery JSON
+   *   - Instantiate and register all HAIoTBridge entities
+   *   - Restore persisted NVS values for CONTROL-type bridges
+   *   - Publish initial system heartbeat
+   *
+   * Notes:
+   *   - This function may reboot the device.
+   *   - This function does NOT configure application-specific GPIOs
+   *     (relays, LEDs, sensors).
+   *
+   * @param deviceParamsJson Pointer to the DeviceParams R2 JSON definition.
+   * @param bridgeConfig     Pointer to the static BridgeConfig array.
+   * @param bridgeCount      Number of entries in the BridgeConfig array.
+   * @param discoveryJson    Pointer to the Home Assistant discovery JSON.
+   *
+   * @return true if initialization completed normally.
+   * @return false if a fatal error occurred before entering runtime loop.
    */
-  void InitCore();
+  bool initCore(
+    const char* deviceParamsJson,
+    const BridgeConfig* bridgeConfig,
+    size_t bridgeCount,
+    const char* discoveryJson
+  );
 
   /**
    * @brief Execute the full Communication State Machine.
@@ -245,6 +273,8 @@ namespace HestiaCore {
    * @note Safe to call before InitCore(). No validation is performed at this stage.
    */
   void loadBridgeConfig(const BridgeConfig* table, size_t count);
+
+  void HAInit();
 
 } // namespace HestiaCore
 // ============================================================================

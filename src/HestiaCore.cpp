@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "HestiaCore.h"
+#include "HestiaProvisioning.h"
 #include "HestiaTempo.h"
 using Tempo::literals::operator"" _id;
 
@@ -171,6 +172,92 @@ namespace HestiaCore {
 
         Serial.println(F("=== [BridgeRegistry] Initialization completed ==="));
     }
+
+    // =====================================================================================
+    //  initCore() — Complete communication state machine
+    // -------------------------------------------------------------------------------------
+    static bool _coreInitialized = false;
+
+    bool initCore(
+        const char* deviceParamsJson,
+        const BridgeConfig* bridgeConfig,
+        size_t bridgeCount,
+        const char* discoveryJson
+    )
+    {
+        // ---------------------------------------------------------------------
+        // Guard: prevent double initialization
+        // ---------------------------------------------------------------------
+        if (_coreInitialized) {
+            Serial.println(F("[HestiaCore] WARNING: initCore() called more than once."));
+            return false;
+        }
+        _coreInitialized = true;
+
+        Serial.println(F("=== [HestiaCore] Core initialization start ==="));
+
+        // 0) Minimal hardware initialization
+        HardwareInit::InitHardwareMinimal();
+        Serial.println(F("[HestiaCore] Minimal hardware initialized"));
+
+        // 1) Load device parameters (R2 JSON → HestiaParam objects)
+        if (!HestiaConfig::loadDeviceParams(deviceParamsJson)) {
+            Serial.println(F("[HestiaCore] ERROR: DeviceParams loading failed"));
+            return false;
+        }
+        Serial.println(F("[HestiaCore] Device parameters loaded"));
+
+        // 2) Validate configuration and provisioning decision
+        if (!HestiaConfig::validateR2() || HestiaConfig::ForceProvisioning()) {
+            Serial.println(F("[HestiaCore] Provisioning mode triggered"));
+            Provisioning::StartProvisioning(deviceParamsJson);
+            // NEVER RETURNS
+        }
+        Serial.println(F("[HestiaCore] Configuration validated"));
+
+        // 3) Initialize watchdog (after provisioning only)
+        if (HestiaConfig::getParamObj("watchdog_ms")) {
+            HardwareInit::InitHardwareWatchdog(HestiaConfig::getParamObj("watchdog_ms")->readInt());
+            Serial.println(F("[HestiaCore] Watchdog initialized"));
+        } else {
+            Serial.println(F("[HestiaCore] Watchdog disabled (no parameter)"));
+        }
+
+        // 4) Inject bridge configuration and discovery JSON
+        loadBridgeConfig(bridgeConfig, bridgeCount);
+        HestiaNet::loadDiscoveryJson(discoveryJson);
+
+        Serial.printf(
+            "[HestiaCore] Bridge configuration loaded (%u entries)\n",
+            (unsigned)bridgeCount
+        );
+
+        // 5) Create and register all HAIoTBridge entities
+        RegisterEntitiesIotBridge();
+        Serial.println(F("[HestiaCore] HAIoTBridge entities registered"));
+
+        // 6) Load NVS values for CONTROL-type bridges
+        InitValueNVS();
+        Serial.println(F("[HestiaCore] NVS values restored"));
+
+        // 7) Silent mode for diagnostics-only entities
+        if (HestiaCore::get("IotBridge_ip")) {
+            HestiaCore::get("IotBridge_ip")->setLogWrites(false);
+            Serial.println(F("[HestiaCore] Silent mode for diagnostics-only entities IotBridge_ip "));
+        }
+
+        // 8) Initial system heartbeat
+        if (HestiaCore::get("IotBridge_iotHeartbeat")) {
+            HestiaCore::get("IotBridge_iotHeartbeat")->write("TICK");
+            HestiaCore::get("IotBridge_iotHeartbeat")->setLogWrites(false); // Silent mode
+            Serial.println(F("[HestiaCore] Initial heartbeat sent"));
+        }
+
+        Serial.println(F("=== [HestiaCore] Core initialization complete ==="));
+        return true;
+    }
+
+
 
     // =====================================================================================
     //  CoreComm() — Complete communication state machine
@@ -553,6 +640,74 @@ namespace HestiaCore {
 
         // MQTT log stream (only if connected)
         client.publish(HestiaConfig::getParam("ha_log_topic").c_str(), formatted);
+    }
+
+
+    // =====================================================================================
+    //  HAInit — Home Assistant initialization
+    // =====================================================================================
+    void HAInit() {
+
+        Serial.println();
+        Serial.println();
+
+        HestiaCore::logBook("=== [HAInit] Home Assistant initialization ===");
+
+        // Restore NVS values for CONTROL-type entities
+        HestiaCore::publishValuesToHA();
+        Serial.println("publishValuesToHA finished");
+
+
+        delay(100); // ensure HA-side automations detect the new online state
+
+
+        // ---------------------------------------------------------------------
+        // Log configuration and firmware information
+        // ---------------------------------------------------------------------
+        String model    = HestiaConfig::getParam("model");
+        String version  = HestiaConfig::getParam("version_prog");
+        String devID    = HestiaConfig::getParam("device_id");
+
+        HestiaCore::logBook("Model      : " + model + " " + version);
+        HestiaCore::logBook("Device ID  : " + devID);
+        HestiaCore::logBook("Build      : " + String(__DATE__) + " " + String(__TIME__));
+
+
+        // ---------------------------------------------------------------------
+        // Network State Logging
+        // ---------------------------------------------------------------------
+        String ssid   = WiFi.SSID();
+        int    rssi   = WiFi.RSSI();
+        String ipStr  = WiFi.localIP().toString();
+        String bssid  = WiFi.BSSIDstr();
+
+        HestiaCore::logBook("[*] Network information for SSID : " + ssid);
+        HestiaCore::logBook("[+] RSSI       : " + String(rssi) + " dBm");
+        HestiaCore::logBook("[+] IP address : " + ipStr);
+        HestiaCore::logBook("[+] MAC (BSSID): " + bssid);
+
+
+        // ---------------------------------------------------------------------
+        // HA internal values
+        // ---------------------------------------------------------------------
+        HestiaCore::get("IotBridge_SW_version")->write(devID + " " + version);
+        HestiaCore::get("IotBridge_ip")->write(ssid + " @ " + String(rssi) + " dB");
+
+
+
+        // ---------------------------------------------------------------------
+        // User section : for real sensor initialization (optional)
+        // ---------------------------------------------------------------------
+        Serial.println(F("=== [HAInit] user initialization ==="));
+
+        // Example macros:
+        // auto* ph = HA("sensor_ph");
+        // if (ph) ph->write(lireCapteurPH());
+        //
+        // auto* temp = HA("sensor_temp");
+        // if (temp) temp->write(lireTempEau());
+
+        Serial.println(F("=== [HAInit] finished ==="));
     }
 
 } // namespace HestiaCore

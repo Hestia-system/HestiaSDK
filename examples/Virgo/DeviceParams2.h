@@ -35,7 +35,7 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "label": "Device Model",
       "provisioning": false,
       "required": true,
-      "critical": true,
+      "critical": false,
       "default": "HESTIA_SDK",
       "decimals": 0,
       "pattern": "anything",
@@ -47,8 +47,8 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "label": "Firmware Version",
       "provisioning": false,
       "required": true,
-      "critical": true,
-      "default": "V1.1.2",
+      "critical": false,
+      "default": "V1.1.4",
       "decimals": 0,
       "pattern": "anything",
       "validate": { "minLen": 1, "maxLen": 16 }
@@ -59,7 +59,7 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "label": "IoT Alive Interval (ms)",
       "provisioning": false,
       "required": true,
-      "critical": true,
+      "critical": false,
       "default": "5000",
       "decimals": 0,
       "validate": { "min": 100, "max": 60000 }
@@ -70,7 +70,7 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "label": "Watchdog Timeout (ms)",
       "provisioning": false,
       "required": true,
-      "critical": true,
+      "critical": false,
       "default": "20000",
       "decimals": 0,
       "validate": { "min": 1000, "max": 120000 }
@@ -103,7 +103,7 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "label": "Device Identifier",
       "provisioning": false,
       "required": true,
-      "critical": true,
+      "critical": false,
       "default": "Virgo",
       "decimals": 0,
       "pattern": "anything",
@@ -115,33 +115,11 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "label": "Home Assistant Log Topic",
       "provisioning": false,
       "required": true,
-      "critical": true,
+      "critical": false,
       "default": "Virgo/log/toHA",
       "decimals": 0,
       "pattern": "anything",
       "validate": { "minLen": 1, "maxLen": 128 }
-    },
-    {
-      "key": "led_onboard",
-      "type": "number",
-      "label": "Onboard LED Pin",
-      "provisioning": false,
-      "required": true,
-      "critical": false,
-      "default": "8",
-      "decimals": 0,
-      "validate": { "min": -1, "max": 48 }
-    },
-    {
-      "key": "pin_provisioning",
-      "type": "number",
-      "label": "Provisioning Button Pin",
-      "provisioning": false,
-      "required": true,
-      "critical": false,
-      "default": "9",
-      "decimals": 0,
-      "validate": { "min": -1, "max": 48 }
     },
     {
       "key": "prov_hold_ms",
@@ -301,6 +279,4 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
 #define PARAM_MQTT_FLUSH_WINDOW  (HestiaConfig::getParamObj("mqtt_flush_window"))
 #define PARAM_DEVICE_ID          (HestiaConfig::getParamObj("device_id"))
 #define PARAM_HA_LOG_TOPIC       (HestiaConfig::getParamObj("ha_log_topic"))
-#define PARAM_LED_ONBOARD        (HestiaConfig::getParamObj("led_onboard"))
-#define PARAM_PIN_PROV           (HestiaConfig::getParamObj("pin_provisioning"))
 #define PARAM_PROV_HOLD_MS       (HestiaConfig::getParamObj("prov_hold_ms"))

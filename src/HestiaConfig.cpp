@@ -139,10 +139,8 @@ namespace HestiaConfig {
   //  This allows hardware-based reset into provisioning mode.
   // ============================================================================
 
-  void pollProvisioningButton() {
-    if (HestiaConfig::getParamObj("pin_provisioning")->readInt() < 0) return;
+  void pollProvisioningButton(int pin, int timePress) {
 
-    int pin = HestiaConfig::getParamObj("pin_provisioning")->readInt();
     int level = digitalRead(pin);
     bool pressed = (level == LOW);
 
@@ -153,14 +151,13 @@ namespace HestiaConfig {
     // Press start
     if (pressed && !wasPressed) {
         wasPressed = true;
-        Tempo::oneShot("PROV_BUT_DELAY"_id).start(HestiaConfig::getParamObj("prov_hold_ms")->readInt()); 
+        Tempo::oneShot("PROV_BUT_DELAY"_id).start(timePress); 
         holdValidated = false;
         return;
     }
 
     // Button held
     if (pressed && wasPressed && !holdValidated) {
-        int holdMs = HestiaConfig::getParamObj("prov_hold_ms")->readInt();
         if (Tempo::oneShot("PROV_BUT_DELAY"_id).done()) {
             Serial.println(F("[HestiaConfig] Long press detected, force provisioning enabled."));
             SetForceProvisioning(true);

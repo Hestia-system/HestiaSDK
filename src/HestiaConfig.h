@@ -310,7 +310,7 @@ void SetForceProvisioning(bool enable);
    *   • One-shot operation: requires a complete press→release cycle
  *     between provisioning triggers.
  */
-void pollProvisioningButton();
+void pollProvisioningButton(int pin, int timePress);
 
 
 

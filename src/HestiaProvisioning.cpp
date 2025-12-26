@@ -134,6 +134,11 @@ namespace Provisioning {
     // ----------------------------------------------------------------------
     for (JsonObject meta : schemaParams) {
 
+    // Provisioning filter
+    // --------------------------------------------------
+      if (!meta["provisioning"].as<bool>())
+          continue;
+
         const char* key   = meta["key"];
         const char* label = meta["label"] | key;
         const char* type  = meta["type"]  | "string";
