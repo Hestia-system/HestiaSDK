@@ -364,9 +364,9 @@ namespace HestiaNet {
  *        homeassistant/device/<device_id>/config
  *
  *****************************************************************************************/
-void MQTTDiscovery() {
-
-        Serial.println(F("\n=== [HestiaNet | MQTT Discovery] Publishing HA device config ==="));
+void MQTTDiscovery()
+{
+    Serial.println(F("\n=== [HestiaNet | MQTT Discovery] Publishing HA device config ==="));
 
     // ---------------------------------------------------------------------
     // 0) Guards
@@ -382,7 +382,7 @@ void MQTTDiscovery() {
     }
 
     // ---------------------------------------------------------------------
-    // 1) Convert PROGMEM → RAM (String)
+    // 1) Convert PROGMEM → RAM
     // ---------------------------------------------------------------------
     String payload;
     size_t len = strlen_P(g_discoveryJson);
@@ -393,56 +393,57 @@ void MQTTDiscovery() {
     }
 
     // ---------------------------------------------------------------------
-    // 2) JSON syntax validation
+    // 2) JSON syntax validation (ONLY syntax)
     // ---------------------------------------------------------------------
     DynamicJsonDocument doc(8192);
     DeserializationError err = deserializeJson(doc, payload);
 
     if (err) {
-        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Invalid discovery JSON"));
-        Serial.print(F("[HestiaNet | MQTT Discovery] Error: "));
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Invalid JSON syntax"));
+        Serial.print  (F("[HestiaNet | MQTT Discovery] Error: "));
         Serial.println(err.c_str());
-        Serial.println(F("[HestiaNet | MQTT Discovery] Raw payload:"));
-        Serial.println(payload);
         return;
     }
 
     // ---------------------------------------------------------------------
-    // 3) Minimal Home Assistant structure sanity checks
+    // 3) Hestia structural validation (NOT Home Assistant validation)
     // ---------------------------------------------------------------------
-    if (!doc.containsKey("device")) {
-        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing 'device' object"));
+    if (!doc.containsKey("device") || !doc["device"].is<JsonObject>()) {
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing or invalid 'device' object"));
         return;
     }
 
-    if (!doc.containsKey("name") && !doc.containsKey("unique_id")) {
-        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing 'name' or 'unique_id'"));
+    if (!doc.containsKey("cmps") || !doc["cmps"].is<JsonObject>()) {
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing or invalid 'cmps' object"));
         return;
     }
 
-    // NOTE:
-    // We intentionally do NOT enforce HA component-specific fields
-    // (stat_t, cmd_t, etc.) here. This will be handled by the generator.
+    JsonObject cmps = doc["cmps"].as<JsonObject>();
+    if (cmps.size() == 0) {
+        Serial.println(F("[HestiaNet | MQTT Discovery] ✖ No components defined (cmps empty)"));
+        return;
+    }
 
     // ---------------------------------------------------------------------
-    // Build Home Assistant discovery topic
+    // 4) Publish raw discovery payload
+    // NOTE: HA validation is delegated to the generator.
     // ---------------------------------------------------------------------
     String topic = "homeassistant/device/";
     topic += HestiaConfig::getParam("device_id");
     topic += "/config";
 
-    // ---------------------------------------------------------------------
-    // Publish (retain = true, QoS = 1)
-    // ---------------------------------------------------------------------
     bool ok = client.publish(topic.c_str(), payload.c_str(), true, 1);
 
-    if (ok)
-        Serial.printf("[HestiaNet | MQTT Discovery] ✓ Published to %s\n", topic.c_str());
-    else
-        Serial.printf("[HestiaNet | MQTT Discovery] ✖ Publish error on %s\n", topic.c_str());
+    if (ok) {
+        Serial.printf("[HestiaNet | MQTT Discovery] ✓ Published (%u components) → %s\n",
+                      cmps.size(), topic.c_str());
+    } else {
+        Serial.printf("[HestiaNet | MQTT Discovery] ✖ Publish error → %s\n", topic.c_str());
+    }
 
     Serial.println(F("=== [HestiaNet | MQTT Discovery] Done ===\n"));
 }
+
 
 
 

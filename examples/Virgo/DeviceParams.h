@@ -171,7 +171,7 @@ static const char HESTIA_PARAM_JSON[] PROGMEM = R"json(
       "provisioning": false,
       "required": true,
       "critical": false,
-      "default": "V1.1.5",
+      "default": "V1.1.6",
       "decimals": 0,
       "pattern": "anything",
       "validate": { "minLen": 1, "maxLen": 16 }
