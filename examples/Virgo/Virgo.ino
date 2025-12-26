@@ -37,158 +37,37 @@
 #include "HestiaTempo.h"
 using Tempo::literals::operator"" _id;
 
-
-void HAInit() {
-
-    // ---------------------------------------------------------------------
-    // System : Home Assistant initialization
-    // ---------------------------------------------------------------------
-    Serial.println();
-    Serial.println();
-
-    HestiaCore::logBook("=== [HAInit] Home Assistant initialization ===");
-
-    // Restore NVS values for CONTROL-type entities
-    HestiaCore::publishValuesToHA();
-    Serial.println("publishValuesToHA finished");
+// ***** OBJECTS INITIALISATION  **********************************************************
 
 
-    delay(100); // ensure HA-side automations detect the new online state
+// ***** SECTION USER FONCTIONS  **********************************************************
 
 
-    // ---------------------------------------------------------------------
-    // Log configuration and firmware information
-    // ---------------------------------------------------------------------
-    String model    = HestiaConfig::getParam("model");
-    String version  = HestiaConfig::getParam("version_prog");
-    String devID    = HestiaConfig::getParam("device_id");
+// ***** VARIABLES   **********************************************************************
 
-    HestiaCore::logBook("Model      : " + model + " " + version);
-    HestiaCore::logBook("Device ID  : " + devID);
-    HestiaCore::logBook("Build      : " + String(__DATE__) + " " + String(__TIME__));
+int ledOnBoard = 8;
+int pinProvisioning = 9;
 
-
-    // ---------------------------------------------------------------------
-    // Network State Logging
-    // ---------------------------------------------------------------------
-    String ssid   = WiFi.SSID();
-    int    rssi   = WiFi.RSSI();
-    String ipStr  = WiFi.localIP().toString();
-    String bssid  = WiFi.BSSIDstr();
-
-    HestiaCore::logBook("[*] Network information for SSID : " + ssid);
-    HestiaCore::logBook("[+] RSSI       : " + String(rssi) + " dBm");
-    HestiaCore::logBook("[+] IP address : " + ipStr);
-    HestiaCore::logBook("[+] MAC (BSSID): " + bssid);
-
-
-    // ---------------------------------------------------------------------
-    // HA internal values
-    // ---------------------------------------------------------------------
-    // Serial.println(HestiaCore::commOK() ? "Communication OK" : "Communication NOT OK");
-    HA_SW_version->write(devID + " " + version);
-    HA_ip->write(ssid + " @ " + String(rssi) + " dB");
-
-
-
-    // ---------------------------------------------------------------------
-    // User section : for real sensor initialization (optional)
-    // ---------------------------------------------------------------------
-    Serial.println(F("=== [HAInit] user initialization ==="));
-
-    // Example macros:
-    // auto* ph = HA("sensor_ph");
-    // if (ph) ph->write(lireCapteurPH());
-    //
-    // auto* temp = HA("sensor_temp");
-    // if (temp) temp->write(lireTempEau());
-
-    Serial.println(F("=== [HAInit] finished ==="));
-}
-
-
+// ***** SETUP SETUP  SETUP SETUP  SETUP SETUP  SETUP SETUP  ******************************
 void setup() 
 {
+    HestiaCore::initCore(HESTIA_PARAM_JSON, bridge_config, BRIDGE_COUNT, config_json);
+ 
+    // 1) INPUT / OUTPUT SETUP
     // ---------------------------------------------------------------------
-    // 0) Basic hardware init
-    // ---------------------------------------------------------------------
-    HardwareInit::InitHardwareMinimal();
+    pinMode(ledOnBoard, OUTPUT);
+    pinMode(pinProvisioning, INPUT);
 
+    // 2) SENSORS SETUP
     // ---------------------------------------------------------------------
-    // 1) Load device parameters (R2 JSON → HestiaParam objects)
-    // ---------------------------------------------------------------------
-    HestiaConfig::loadDeviceParams(HESTIA_PARAM_JSON);
 
-    // ---------------------------------------------------------------------
-    // 2) Validate configuration and provisioning decision
-    // ---------------------------------------------------------------------
-    if (!HestiaConfig::validateR2() || HestiaConfig::ForceProvisioning()) {
-        Serial.println(F("[MAIN] ⚠ Provisioning mode triggered."));
-        Provisioning::StartProvisioning(HESTIA_PARAM_JSON);   // never returns
-    }
 
-    // ---------------------------------------------------------------------
-    // 3) Now that provisioning is settled → start watchdog
-    // ---------------------------------------------------------------------
-    HardwareInit::InitHardwareWatchdog(PARAM_WATCHDOG_MS->readInt());
-
-    // ---------------------------------------------------------------------
-    // 4) Inject bridge configuration and discovery JSON
-    // ---------------------------------------------------------------------
-    HestiaCore::loadBridgeConfig(bridge_config, BRIDGE_COUNT);
-    HestiaNet::loadDiscoveryJson(config_json);
-
-    // ---------------------------------------------------------------------
-    // 5) Create all HAIoTBridge entities
-    // ---------------------------------------------------------------------
-    HestiaCore::RegisterEntitiesIotBridge();
-
-    // ---------------------------------------------------------------------
-    // 6) Load NVS values for CONTROL bridges
-    // ---------------------------------------------------------------------
-    HestiaCore::InitValueNVS();
-
-    // ---------------------------------------------------------------------
-    // 7) Silent mode for diagnostics-only entities
-    // ---------------------------------------------------------------------
-    HA_iotHeartbeat->setLogWrites(false);
-    HA_ip->setLogWrites(false);
-
-    // ---------------------------------------------------------------------
-    // 8) TX Heartbeat to HA — signals presence
-    // ---------------------------------------------------------------------
-    HA_iotHeartbeat->write("TICK");
-
-    // ---------------------------------------------------------------------
-    // 9) Onboard LED setup
-    // ---------------------------------------------------------------------
-    int led = PARAM_LED_ONBOARD->readInt();
-    if (led >= 0) {
-        pinMode(led, OUTPUT);
-        Serial.printf("Led onboard enabled on GPIO %d\n", led);
-    } else {
-        Serial.println("Led onboard free for user.");
-    }
-
-    // ---------------------------------------------------------------------
-    // 10) User hardware initialization (optionnel)
-    // ---------------------------------------------------------------------
-    //   Init capteurs, relais, ADC, I2C etc.
 }
 
-/*****************************************************************************************
- *  loop()
+
+/* ***** LOOP  LOOP  LOOP  LOOP  LOOP  LOOP  LOOP  LOOP    ********************************
  *  ------
  *  Runtime execution loop divided into well-defined operational layers.
- *
- *  Layers:
- *    1) CoreComm   — WiFi/MQTT state machine (non-blocking)
- *    2) SystemYield — cooperative scheduling for FreeRTOS
- *    3) Activation  — detection of new network session (WiFi+MQTT ONLINE)
- *    4) OTA Control — user-triggered OTA (if implemented)
- *    5) UX Feedback — LED indicator + periodic heartbeat to HA
- *    6) HA Refresh  — periodic RSSI/IP update for Home Assistant
- *    7) Provisioning Button Polling — press-and-hold trigger
  *
  *  Notes:
  *    • No blocking calls are allowed in this function.
@@ -196,41 +75,31 @@ void setup()
  *****************************************************************************************/
 void loop()
 {
-    // =========================================================================
     // 1) CORE COMMUNICATION — WiFi/MQTT state machine
-    //    Handles:
-    //      • WiFi guard
-    //      • MQTT guard
-    //      • Retained flush management
-    //      • MQTT client.loop()
-    //      • Watchdog feeding
     // =========================================================================
     HestiaCore::CoreComm();
 
-
-    // =========================================================================
     // 2) SYSTEM YIELD — maintain cooperative multitasking
     // =========================================================================
     vTaskDelay(1);   // avoids monopolizing the CPU, keeps lwIP and RTOS healthy
 
-
-    // =========================================================================
     // 3) ACTIVATION SEQUENCE — detect transition to fully ONLINE state
     // =========================================================================
     if (HestiaCore::newSeqComm()) {
 
-        // Initial publication of all HA entities (sensors, switches, etc.)
         // Restores user-facing state in Home Assistant.
-        HAInit();
+        HestiaCore::HAInit();
+
+        // user section for Home Assistant initialisation
+        // your code here ...
+
+        // end user section
         HestiaCore::setHAInitDone();
         Serial.println("Communication and Home Assistant ready!");
     }
-
     bool InitHAOK = HestiaCore::InitHAOK();
 
-    // =========================================================================
     // 4) OTA CONTROL — user-triggered firmware update
-    //    (Placeholder — user must implement OTA_Update())
     // =========================================================================
     if (InitHAOK && HA_OTA_Update->onChange()) {
         String ip = WiFi.localIP().toString();
@@ -239,51 +108,28 @@ void loop()
         HestiaOTA_Web_Start();
     }
 
-
-    // =========================================================================
-    // 5) USER EXPERIENCE FEEDBACK — onboard LED indicator
+    // 5) IF WiFi + MQTT + HA CONNECTED ...
     // =========================================================================
     if (InitHAOK) { 
-        if (PARAM_LED_ONBOARD->readInt() >= 0) {
-
-            // Blink LED only when ONLINE (WiFi+MQTT connected)
-            if (Tempo::interval("ledLoop"_id).every(500)) {
-                static bool ledState = false;
-                ledState = !ledState;
-                digitalWrite(PARAM_LED_ONBOARD->readInt(), ledState);
-            }
+        // 5.1 Blink ledOnBoard every 0,5 sec
+        if (Tempo::interval("ledLoop"_id).every(500)) {
+            digitalWrite(ledOnBoard, !digitalRead(ledOnBoard));
         }
-    } 
-
-
-    // =========================================================================
-    // 6) HEARTBEAT — periodic device liveness for Home Assistant
-    // =========================================================================
-    if (InitHAOK) {
+        // 5.2 HEARTBEAT — periodic device liveness for Home Assistant
         if (
             Tempo::interval("heartbeat"_id).every(PARAM_IOT_ALIVE_MS->readInt())) {
             HA_iotHeartbeat->write("TICK");
         }
-    }
-
-
-    // =========================================================================
-    // 7) NETWORK INFO REFRESH — RSSI + SSID update every 2 minutes
-    // =========================================================================
-    if (InitHAOK) { 
+        // 5.3 NETWORK INFO REFRESH — RSSI + SSID update every 2 minutes
         if (Tempo::interval("RefreshHA"_id).every(120000)) {
             HA_ip->write((String)WiFi.SSID() + " @ " + WiFi.RSSI() + " dB");
         }
-    }
+    } 
 
-
+    // 6) PROVISIONING BUTTON — press-and-hold detection for 5 sec
     // =========================================================================
-    // 8) PROVISIONING BUTTON — press-and-hold detection
-    // =========================================================================
-    HestiaConfig::pollProvisioningButton();
+    HestiaConfig::pollProvisioningButton(pinProvisioning, 5000);
 
-
-    // =========================================================================
-    // 9) USER SECTION — event-driven architecture (no idle actions)
+    // 7) USER SECTION — event-driven architecture (no idle actions)
     // =========================================================================
 }

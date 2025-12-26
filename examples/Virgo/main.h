@@ -145,23 +145,13 @@ static const char config_json[] PROGMEM = R"rawliteral(
       "p": "sensor",
       "name": "ip",
       "unique_id": "Virgo_IP Address",
-      "stat_t": "Virgo/ip/toHA",
-        "availability": [
-        {
-          "topic": "Virgo/availability"
-        }
-      ]
+      "stat_t": "Virgo/ip/toHA"
     },
     "log": {
       "p": "sensor",
       "name": "log",
       "unique_id": "Virgo_log",
-      "stat_t": "Virgo/log/toHA",
-        "availability": [
-        {
-          "topic": "Virgo/availability"
-        }
-      ]
+      "stat_t": "Virgo/log/toHA"
     },
     "iotHeartbeat": {
       "p": "sensor",
