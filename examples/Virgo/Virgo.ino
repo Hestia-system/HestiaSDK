@@ -96,6 +96,7 @@ void loop()
         // end user section
         HestiaCore::setHAInitDone();
         Serial.println("Communication and Home Assistant ready!");
+        HA_iotHeartbeat->write("TICK");
     }
     bool InitHAOK = HestiaCore::InitHAOK();
 
