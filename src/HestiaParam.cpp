@@ -90,6 +90,12 @@ void HestiaParam::loadFromNVS(bool lazyInit)
 
     if (prefs.isKey(k.c_str())) {
         _value = prefs.getString(k.c_str(), _value);
+        // Healing path: if a required/critical provisioning value is stored empty
+        // but a schema default exists, restore and persist the default.
+        if (lazyInit && _value.length() == 0 && defaultValue.length() > 0 && (required || critical)) {
+            _value = defaultValue;
+            prefs.putString(k.c_str(), _value);
+        }
     }
     else if (lazyInit) {
         prefs.putString(k.c_str(), _value);
@@ -268,7 +274,7 @@ bool HestiaParam::validateRange(const String& candidate) const
         return true;
     }
 
-    if (type == "number") {
+    if (type == "number" || type == "int" || type == "float") {
         double v = candidate.toFloat();
 
         if (validators.hasMin && v < validators.min) return false;
