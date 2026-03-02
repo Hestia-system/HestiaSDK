@@ -207,6 +207,9 @@ namespace HestiaCore {
         }
         Serial.println(F("[HestiaCore] Device parameters loaded"));
 
+        // 1.5) Apply new-firmware initialization policy before validation/provisioning decision
+        HestiaConfig::applyUpdateInitializationPolicy();
+
         // 2) Validate configuration and provisioning decision
         if (!HestiaConfig::validateR2() || HestiaConfig::ForceProvisioning()) {
             Serial.println(F("[HestiaCore] Provisioning mode triggered"));

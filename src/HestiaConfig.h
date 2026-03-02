@@ -338,5 +338,22 @@ void pollProvisioningButton(int pin, int timePress);
  */
 bool validateR2();
 
-} // namespace HestiaConfig
+/**
+ * @brief Apply firmware-update initialization policy.
+ *
+ * Boot policy:
+ *   • Compare current firmware ID ("version_prog") with NVS key "last_fw_id".
+ *   • If different, a new firmware is considered detected.
+ *   • If parameter "init_on_update" is true:
+ *       - reset all provisioning parameters to their schema defaults
+ *       - persist these defaults to NVS
+ *       - clear "force_prov" flag
+ *   • Persist current firmware ID into "last_fw_id".
+ *
+ * Notes:
+ *   • Should be called after loadDeviceParams(), before validateR2().
+ *   • No-op if "version_prog" is missing/empty.
+ */
+void applyUpdateInitializationPolicy();
 
+} // namespace HestiaConfig

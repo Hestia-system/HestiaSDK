@@ -25,6 +25,8 @@ namespace {
 
   // NVS
   const char* NVS_NAMESPACE = "HConfig";
+  const char* NVS_KEY_FORCE_PROV = "force_prov";
+  const char* NVS_KEY_LAST_FW_ID = "last_fw_id";
   Preferences prefs;
 
   // ============================================================================
@@ -96,8 +98,8 @@ namespace HestiaConfig {
 
   bool ForceProvisioning() {
       Preferences prefs;
-      prefs.begin("HConfig", false);
-      bool v = prefs.getBool("force_prov", false);
+      prefs.begin(NVS_NAMESPACE, false);
+      bool v = prefs.getBool(NVS_KEY_FORCE_PROV, false);
       prefs.end();
       return v;
   }
@@ -114,8 +116,8 @@ namespace HestiaConfig {
 
   void SetForceProvisioning(bool enable) {
       Preferences prefs;
-      prefs.begin("HConfig", false);
-      prefs.putBool("force_prov", enable);
+      prefs.begin(NVS_NAMESPACE, false);
+      prefs.putBool(NVS_KEY_FORCE_PROV, enable);
       delay(30);
       prefs.end();
   }
@@ -337,6 +339,75 @@ bool validateR2()
     }
 
     return true;
+}
+
+
+// ============================================================================
+//  applyUpdateInitializationPolicy — update-time reset policy
+// ----------------------------------------------------------------------------
+//  Policy:
+//    • Detect firmware change using:
+//         current = param "version_prog"
+//         last    = NVS "last_fw_id"
+//    • If different:
+//         - if "init_on_update" is true:
+//             reset all provisioning params to schema defaults and save to NVS
+//             clear force_prov
+//         - persist current into last_fw_id
+//
+//  Expected call site:
+//    after loadDeviceParams(), before validateR2().
+// ============================================================================
+void applyUpdateInitializationPolicy()
+{
+    HestiaParam* versionParam = getParamObj("version_prog");
+    if (!versionParam) {
+        Serial.println(F("[HestiaConfig] Update policy skipped: missing 'version_prog'."));
+        return;
+    }
+
+    String currentFwId = versionParam->read();
+    currentFwId.trim();
+    if (currentFwId.length() == 0) {
+        Serial.println(F("[HestiaConfig] Update policy skipped: empty 'version_prog'."));
+        return;
+    }
+
+    Preferences localPrefs;
+    localPrefs.begin(NVS_NAMESPACE, false);
+    String lastFwId = localPrefs.getString(NVS_KEY_LAST_FW_ID, "");
+    lastFwId.trim();
+
+    if (lastFwId == currentFwId) {
+        localPrefs.end();
+        return;
+    }
+
+    Serial.printf("[HestiaConfig] New firmware detected: '%s' -> '%s'\n",
+                  lastFwId.c_str(), currentFwId.c_str());
+
+    bool initializationOnUpdate = false;
+    String initFlag = getParam("init_on_update");
+    initFlag.trim();
+    initFlag.toLowerCase();
+    initializationOnUpdate = (initFlag == "true" || initFlag == "1" || initFlag == "on");
+
+    if (initializationOnUpdate) {
+        Serial.println(F("[HestiaConfig] init_on_update=true: resetting provisioning params to defaults."));
+
+        for (HestiaParam* p : _params) {
+            if (!p || !p->provisioning) continue;
+            p->write(p->defaultValue);
+            p->saveToNVS();
+        }
+
+        localPrefs.putBool(NVS_KEY_FORCE_PROV, false);
+    } else {
+        Serial.println(F("[HestiaConfig] init_on_update=false: preserving provisioning NVS."));
+    }
+
+    localPrefs.putString(NVS_KEY_LAST_FW_ID, currentFwId);
+    localPrefs.end();
 }
 
 
