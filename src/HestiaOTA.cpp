@@ -15,6 +15,7 @@ static int loginAttempts = 0;
 static const int MAX_ATTEMPTS = 5;
 static uint32_t lastActivity = 0;
 static const uint32_t OTA_TIMEOUT_MS = 10UL * 60UL * 1000UL;   // 10 minutes
+static bool otaAuthenticated = false;
 
 // ---------------------------------------------------------------------------
 // HELPERS
@@ -33,6 +34,23 @@ static void rebootDevice()
         "<html><body><h2>Rebooting...</h2></body></html>");
     delay(1500);
     ESP.restart();
+}
+
+static bool otaAuthRequired()
+{
+    String u = HestiaConfig::getParam("iot_user");
+    String p = HestiaConfig::getParam("iot_pass");
+    return !(u.isEmpty() && p.isEmpty());
+}
+
+static bool ensureOtaAuthenticated()
+{
+    if (!otaAuthRequired()) return true;
+    if (otaAuthenticated) return true;
+
+    server.sendHeader("Location", "/");
+    server.send(302);
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +99,7 @@ static void handleLoginPost()
     {
         // LOGIN OK → go to OTA main page
         loginAttempts = 0;
+        otaAuthenticated = true;
         server.sendHeader("Location", "/ota");
         server.send(302);
         return;
@@ -96,6 +115,10 @@ static void handleLoginPost()
 
 static void handleOtaPage()
 {
+    if (!ensureOtaAuthenticated()) {
+        return;
+    }
+
     String title = makeTitle();
 
     String html;
@@ -198,6 +221,10 @@ static void handleOtaPage()
 
 static void handleUpload()
 {
+    if (!ensureOtaAuthenticated()) {
+        return;
+    }
+
     HTTPUpload& up = server.upload();
 
     if (up.status == UPLOAD_FILE_START)
@@ -236,6 +263,9 @@ static void handleUpload()
 
 static void handleCancel()
 {
+    if (!ensureOtaAuthenticated()) {
+        return;
+    }
     rebootDevice();
 }
 
@@ -246,13 +276,11 @@ static void handleCancel()
 static void configureRoutes()
 {
     server.on("/", []() {
-        String u = HestiaConfig::getParam("iot_user");
-        String p = HestiaConfig::getParam("iot_pass");
-
-        if (u == "" && p == "")
-            handleOtaPage();
-        else
+        if (otaAuthRequired() && !otaAuthenticated) {
             handleLoginPage(false);
+            return;
+        }
+        handleOtaPage();
     });
 
     server.on("/login", HTTP_POST, handleLoginPost);
@@ -278,6 +306,7 @@ static void configureRoutes()
 void HestiaOTA_Web_Start()
 {
     loginAttempts = 0;
+    otaAuthenticated = false;
 
     configureRoutes();
     server.begin();

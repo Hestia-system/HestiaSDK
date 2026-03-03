@@ -324,7 +324,6 @@ namespace Provisioning {
    *     Invalid configurations may be saved intentionally via '/forceSave'.
    */
   void handleSave(bool force) {
-
     Serial.println("[Provisioning] handleSave() ENTER");
 
       // Iterate over DeviceParams (R2 JSON schema)
