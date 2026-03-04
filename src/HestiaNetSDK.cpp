@@ -15,6 +15,25 @@ MQTTClient client(256);
 
 namespace HestiaNet {
 
+  // DHCP/mDNS hostnames should use [a-z0-9-], no underscore/spaces.
+  static String sanitizeHostname(const String& raw) {
+    String out;
+    out.reserve(raw.length());
+
+    for (size_t i = 0; i < raw.length(); ++i) {
+      char c = raw[i];
+      if ((c >= 'A' && c <= 'Z')) c = (char)(c - 'A' + 'a');
+      bool ok = ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-');
+      out += ok ? c : '-';
+    }
+
+    while (out.startsWith("-")) out.remove(0, 1);
+    while (out.endsWith("-")) out.remove(out.length() - 1);
+    if (out.length() == 0) out = "hestia-device";
+    if (out.length() > 63) out = out.substring(0, 63);
+    return out;
+  }
+
   // =============================================================
   //  Runtime configuration (loaded from HestiaConfig)
   // =============================================================
@@ -66,12 +85,17 @@ namespace HestiaNet {
     static uint8_t tryCount          = 0;
     static unsigned long delayNext   = 100;
     static bool connecting           = false;
+    static bool stationPrepared      = false;
 
     static bool ssidVisible          = true;
     static unsigned long lastScan    = 0;
 
     String cfgwifi_ssid = HestiaConfig::getParam("wifi_ssid");
     String cfgwifi_pass = HestiaConfig::getParam("wifi_pass");
+    if (cfgwifi_ssid.length() == 0 || cfgwifi_pass.length() == 0) {
+      Serial.println(F("[HestiaNet | WiFi] ✖ Missing wifi_ssid or wifi_pass in config"));
+      return false;
+    }
 
     wl_status_t st = WiFi.status();
 
@@ -83,6 +107,20 @@ namespace HestiaNet {
       delayNext = 100;
       connecting = false;
       return true;
+    }
+
+    if (!stationPrepared) {
+
+
+      String cfgdevice_id = HestiaConfig::getParam("device_id");
+      String host = sanitizeHostname(cfgdevice_id);
+      bool hostOk = WiFi.setHostname(host.c_str());
+      Serial.printf("[HestiaNet | WiFi] Hostname cfg='%s' effective='%s' (%s)\n",
+                    cfgdevice_id.c_str(), host.c_str(), hostOk ? "ok" : "failed");
+
+      WiFi.mode(WIFI_STA);
+      WiFi.setSleep(false);
+      stationPrepared = true;
     }
 
     // ---------------------------------------------------------------------
@@ -104,7 +142,7 @@ namespace HestiaNet {
       ssidVisible = false;
 
       for (int i = 0; i < n; i++) {
-        if (WiFi.SSID(i) == cfgwifi_ssid.c_str()) {
+        if (WiFi.SSID(i).equals(cfgwifi_ssid)) {
           ssidVisible = true;
           Serial.printf("[HestiaNet | WiFi] ✓ SSID '%s' found (RSSI=%d dBm, channel=%d)\n",
                         cfgwifi_ssid.c_str(), WiFi.RSSI(i), WiFi.channel(i));
@@ -133,12 +171,16 @@ namespace HestiaNet {
     if (millis() - lastReset > 5000) {
       Serial.printf("[HestiaNet | WiFi] Attempt %u...\n", tryCount + 1);
 
-      WiFi.disconnect(true, true);   // wipe config + connection
+      WiFi.disconnect(false, false);
       delay(50);
-      WiFi.mode(WIFI_STA);
-
       String cfgdevice_id = HestiaConfig::getParam("device_id");
-      WiFi.setHostname(cfgdevice_id.c_str());
+      String host = sanitizeHostname(cfgdevice_id);
+      bool hostOk = WiFi.setHostname(host.c_str());
+      Serial.printf("[HestiaNet | WiFi] Hostname cfg='%s' effective='%s' (%s)\n",
+                    cfgdevice_id.c_str(), host.c_str(), hostOk ? "ok" : "failed");
+
+      WiFi.mode(WIFI_STA);
+      WiFi.setSleep(false);
 
       lastReset = millis();
     }
@@ -198,7 +240,9 @@ namespace HestiaNet {
 
     Serial.println();
     Serial.println(F("=== [WiFi Info] ======================================="));
+    Serial.printf("Host   : %s\n", WiFi.getHostname());
     Serial.printf("SSID   : %s\n", WiFi.SSID().c_str());
+    Serial.printf("STA MAC: %s\n", WiFi.macAddress().c_str());
     Serial.printf("BSSID  : %s\n", WiFi.BSSIDstr().c_str());
     Serial.printf("IP     : %s\n", WiFi.localIP().toString().c_str());
     Serial.printf("GW     : %s\n", WiFi.gatewayIP().toString().c_str());
