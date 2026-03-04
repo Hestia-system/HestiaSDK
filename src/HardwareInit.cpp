@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "HardwareInit.h"
+#include "esp_idf_version.h"
 
 /*****************************************************************************************
  *  File     : HardwareInit.cpp
@@ -62,37 +63,19 @@ namespace HardwareInit {
 
     esp_err_t err = ESP_OK;
 
-#if defined(PLATFORMIO)
-    // =============================================================
-    // PLATFORMIO → API IDF 4.x (ancienne API)
-    // =============================================================
-    int timeout_s = timeoutMs / 1000;
-    if (timeout_s < 1) timeout_s = 1;
-
-    err = esp_task_wdt_init(timeout_s, true);
-
-#elif defined(ARDUINO) && defined(ESP32)
-    // =============================================================
-    // ARDUINO IDE → Core ESP32 ≥ 3.0 → IDF 5.x (nouvelle API)
-    // =============================================================
-
+    // Select API based on actual ESP-IDF version, not build system.
+#if defined(ESP_IDF_VERSION_MAJOR) && (ESP_IDF_VERSION_MAJOR >= 5)
     esp_task_wdt_config_t wdt_config{};
     wdt_config.timeout_ms     = static_cast<uint32_t>(timeoutMs);
-    wdt_config.idle_core_mask = (1 << 0);   // ESP32-C3 et ESP32-C6 ont 1 core
+    wdt_config.idle_core_mask = (1U << portNUM_PROCESSORS) - 1U;
     wdt_config.trigger_panic  = true;
 
     err = esp_task_wdt_init(&wdt_config);
-
 #else
-    // =============================================================
-    // FALLBACK (si jamais autre build)
-    // assume IDF 4.x
-    // =============================================================
+    // Legacy API (IDF 4.x)
     int timeout_s = timeoutMs / 1000;
     if (timeout_s < 1) timeout_s = 1;
-
     err = esp_task_wdt_init(timeout_s, true);
-
 #endif
 
     // Error handling
