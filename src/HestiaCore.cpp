@@ -682,12 +682,14 @@ namespace HestiaCore {
         String ssid   = WiFi.SSID();
         int    rssi   = WiFi.RSSI();
         String ipStr  = WiFi.localIP().toString();
+        String staMac = WiFi.macAddress();
         String bssid  = WiFi.BSSIDstr();
 
         HestiaCore::logBook("[*] Network information for SSID : " + ssid);
         HestiaCore::logBook("[+] RSSI       : " + String(rssi) + " dBm");
         HestiaCore::logBook("[+] IP address : " + ipStr);
-        HestiaCore::logBook("[+] MAC (BSSID): " + bssid);
+        HestiaCore::logBook("[+] MAC (STA)  : " + staMac);
+        HestiaCore::logBook("[+] BSSID (AP) : " + bssid);
 
 
         // ---------------------------------------------------------------------
