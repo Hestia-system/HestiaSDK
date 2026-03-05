@@ -355,7 +355,7 @@ namespace HestiaNet {
       return false; // false because caller may need to resubscribe
     }
 
-    Serial.println(F("[HestiaNet | MQTT] ✖ Connection failed"));
+    Serial.printf("[HestiaNet | MQTT] ✖ Connection failed (lastError=%d, returnCode=%d)\n", (int)client.lastError(), (int)client.returnCode());
 
     // ---------------------------------------------------------------------
     // 5️⃣ Update backoff state
@@ -410,7 +410,7 @@ namespace HestiaNet {
  *****************************************************************************************/
 void MQTTDiscovery()
 {
-    Serial.println(F("\n=== [HestiaNet | MQTT Discovery] Publishing HA device config ==="));
+    Serial.println(F("\n=== [HestiaNet | MQTT Discovery] Publishing HA single-component discovery ==="));
 
     // ---------------------------------------------------------------------
     // 0) Guards
@@ -426,7 +426,7 @@ void MQTTDiscovery()
     }
 
     // ---------------------------------------------------------------------
-    // 1) Convert PROGMEM → RAM
+    // 1) Convert PROGMEM -> RAM
     // ---------------------------------------------------------------------
     String payload;
     size_t len = strlen_P(g_discoveryJson);
@@ -437,10 +437,10 @@ void MQTTDiscovery()
     }
 
     // ---------------------------------------------------------------------
-    // 2) JSON syntax validation (ONLY syntax)
+    // 2) Parse + structural checks
     // ---------------------------------------------------------------------
-    DynamicJsonDocument doc(8192);
-    DeserializationError err = deserializeJson(doc, payload);
+    DynamicJsonDocument doc((len * 2) + 4096);
+    DeserializationError err = deserializeJson(doc, payload.c_str());
 
     if (err) {
         Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Invalid JSON syntax"));
@@ -449,9 +449,6 @@ void MQTTDiscovery()
         return;
     }
 
-    // ---------------------------------------------------------------------
-    // 3) Hestia structural validation (NOT Home Assistant validation)
-    // ---------------------------------------------------------------------
     if (!doc.containsKey("device") || !doc["device"].is<JsonObject>()) {
         Serial.println(F("[HestiaNet | MQTT Discovery] ✖ Missing or invalid 'device' object"));
         return;
@@ -462,29 +459,89 @@ void MQTTDiscovery()
         return;
     }
 
+    JsonObject deviceRoot = doc["device"].as<JsonObject>();
     JsonObject cmps = doc["cmps"].as<JsonObject>();
+
     if (cmps.size() == 0) {
         Serial.println(F("[HestiaNet | MQTT Discovery] ✖ No components defined (cmps empty)"));
         return;
     }
 
     // ---------------------------------------------------------------------
-    // 4) Publish raw discovery payload
-    // NOTE: HA validation is delegated to the generator.
+    // 3) Publish one discovery config per component
+    //    - First component: full device object
+    //    - Next components : device.identifiers only
     // ---------------------------------------------------------------------
-    String topic = "homeassistant/device/";
-    topic += HestiaConfig::getParam("device_id");
-    topic += "/config";
+    bool includeFullDevice = true;
+    size_t okCount = 0;
+    size_t failCount = 0;
 
-    bool ok = client.publish(topic.c_str(), payload.c_str(), true, 1);
+    for (JsonPair kv : cmps) {
+        const String cmpKey = kv.key().c_str();
+        JsonObject cmpObj = kv.value().as<JsonObject>();
 
-    if (ok) {
-        Serial.printf("[HestiaNet | MQTT Discovery] ✓ Published (%u components) → %s\n",
-                      cmps.size(), topic.c_str());
-    } else {
-        Serial.printf("[HestiaNet | MQTT Discovery] ✖ Publish error → %s\n", topic.c_str());
+        DynamicJsonDocument outDoc(8192);
+        outDoc.set(cmpObj);
+
+        outDoc.remove("device");
+        JsonObject outDevice = outDoc.createNestedObject("device");
+
+        if (includeFullDevice) {
+            outDevice.set(deviceRoot);
+
+            // Normalize identifiers to array when source uses a scalar.
+            if (outDevice["identifiers"].is<const char*>()) {
+                const char* id = outDevice["identifiers"].as<const char*>();
+                outDevice.remove("identifiers");
+                JsonArray ids = outDevice.createNestedArray("identifiers");
+                ids.add(id);
+            }
+            includeFullDevice = false;
+        } else {
+            JsonArray ids = outDevice.createNestedArray("identifiers");
+
+            if (deviceRoot["identifiers"].is<JsonArray>()) {
+                for (JsonVariant v : deviceRoot["identifiers"].as<JsonArray>()) {
+                    ids.add(v);
+                }
+            } else if (deviceRoot["identifiers"].is<const char*>()) {
+                ids.add(deviceRoot["identifiers"].as<const char*>());
+            } else {
+                ids.add(HestiaConfig::getParam("device_id"));
+            }
+        }
+
+        const char* platform = outDoc["p"] | "";
+        if (strlen(platform) == 0) {
+            Serial.printf("[HestiaNet | MQTT Discovery] ⚠ Skip '%s': missing 'p'\n", cmpKey.c_str());
+            failCount++;
+            continue;
+        }
+
+        const char* uid = outDoc["unique_id"] | "";
+        String objectId = (strlen(uid) > 0) ? String(uid) : cmpKey;
+
+        String topic = "homeassistant/";
+        topic += platform;
+        topic += "/";
+        topic += objectId;
+        topic += "/config";
+
+        String cmpPayload;
+        serializeJson(outDoc, cmpPayload);
+
+        bool ok = client.publish(topic.c_str(), cmpPayload.c_str(), true, 1);
+        if (ok) {
+            okCount++;
+            Serial.printf("[HestiaNet | MQTT Discovery] ✓ %s -> %s\n", cmpKey.c_str(), topic.c_str());
+        } else {
+            failCount++;
+            Serial.printf("[HestiaNet | MQTT Discovery] ✖ %s -> %s\n", cmpKey.c_str(), topic.c_str());
+        }
     }
 
+    Serial.printf("[HestiaNet | MQTT Discovery] Summary: %u ok / %u failed\n",
+                  (unsigned)okCount, (unsigned)failCount);
     Serial.println(F("=== [HestiaNet | MQTT Discovery] Done ===\n"));
 }
 
