@@ -25,7 +25,7 @@ HAIoTBridge::HAIoTBridge(const BridgeConfig& cfg)
   _value(""),
   _valueMem(""),
   _initialized(false),
-  _logWrites(true)
+  _logWrites(false)
 {
   _decimals = computeDecimals(_resolution);
   _nvsKey = shortenKey(_name);
@@ -149,6 +149,7 @@ bool HAIoTBridge::readMQTT(String &topic, String &payload, bool flushMode) {
   // 3) Process message
   // Serial.printf("[MQTT] %s <- %s\n", _name.c_str(), payload.c_str());
   _value = payload;
+  ++_inboundSequence;
   
   if (_type == TypeHA::HA_CONTROL) {
     saveAndPublish(_value);
@@ -222,6 +223,15 @@ uint8_t HAIoTBridge::decimals() const {
 
 void HAIoTBridge::setLogWrites(bool enable) {
     _logWrites = enable;
+}
+
+void HAIoTBridge::resetRuntimeValue() {
+    _value = _defaultValue;
+    _valueMem = _defaultValue;
+}
+
+uint32_t HAIoTBridge::inboundSequence() const {
+    return _inboundSequence;
 }
 
 // ============================================================================
@@ -329,5 +339,3 @@ void HAIoTBridge::publish(const String& val) {
     // Serial.printf("[HAIoTBridge::publish] %s -> %s\n", _topicTo.c_str(), val.c_str());
     HestiaCore::publishToMQTT(_topicTo, val, _logWrites);
   }
-
-

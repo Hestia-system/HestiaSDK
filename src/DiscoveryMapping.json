@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "device_identity",
+      "kind": "device_identity",
+      "label": "Device Identity (HA)",
+      "integration_id": "device_identity",
+      "data": {}
+    },
+    {
+      "id": "sensor_1",
+      "kind": "integration",
+      "integration_id": "sensor",
+      "label": "ha_log_topic",
+      "data": {
+        "device_class": "",
+        "unit_of_measurement": "",
+        "icon": "mdi:notebook-edit",
+        "availability": false,
+        "force_update": false,
+        "source_type": "Parameters",
+        "bridge_ref": "",
+        "parameter_ref": "ha_log_topic",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "ha_log_topic"
+      }
+    },
+    {
+      "id": "sensor_2",
+      "kind": "integration",
+      "integration_id": "sensor",
+      "label": "iotHeartbeat",
+      "data": {
+        "device_class": "",
+        "unit_of_measurement": "",
+        "icon": "mdi:heart-pulse",
+        "availability": false,
+        "force_update": false,
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_iotHeartbeat",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "iotHeartbeat"
+      }
+    },
+    {
+      "id": "sensor_3",
+      "kind": "integration",
+      "integration_id": "sensor",
+      "label": "ip",
+      "data": {
+        "device_class": "",
+        "unit_of_measurement": "",
+        "icon": "mdi:wifi-arrow-up",
+        "availability": true,
+        "force_update": false,
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_ip",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "ip"
+      }
+    },
+    {
+      "id": "sensor_4",
+      "kind": "integration",
+      "integration_id": "sensor",
+      "label": "SW_version",
+      "data": {
+        "device_class": "",
+        "unit_of_measurement": "",
+        "icon": "mdi:language-cpp",
+        "availability": true,
+        "force_update": false,
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_SW_version",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "SW_version"
+      }
+    },
+    {
+      "id": "button_1",
+      "kind": "integration",
+      "integration_id": "button",
+      "label": "OTA",
+      "data": {
+        "device_class": "update",
+        "icon": "",
+        "availability": true,
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_OTA",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "OTA"
+      }
+    },
+    {
+      "id": "sensor_5",
+      "kind": "integration",
+      "integration_id": "sensor",
+      "label": "DateTimeOut",
+      "data": {
+        "device_class": "",
+        "unit_of_measurement": "",
+        "icon": "",
+        "availability": true,
+        "force_update": false,
+        "name": "DateTimeOut",
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_DateTimeOut",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "DateTimeOut"
+      }
+    },
+    {
+      "id": "binary_sensor_1",
+      "kind": "integration",
+      "integration_id": "binary_sensor",
+      "label": "Button",
+      "data": {
+        "device_class": "",
+        "payload_on": "ON",
+        "payload_off": "OFF",
+        "off_delay": "",
+        "icon": "",
+        "availability": true,
+        "force_update": false,
+        "name": "Button",
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_Button",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "Button"
+      }
+    },
+    {
+      "id": "switch_1",
+      "kind": "integration",
+      "integration_id": "switch",
+      "label": "Led",
+      "data": {
+        "device_class": "",
+        "icon": "",
+        "availability": true,
+        "name": "Led",
+        "source_type": "BridgeConfig",
+        "bridge_ref": "IotBridge_Led",
+        "parameter_ref": "",
+        "parameter_topic_side": "topicTo",
+        "_last_cmp_key": "Led"
+      }
+    }
+  ]
+}

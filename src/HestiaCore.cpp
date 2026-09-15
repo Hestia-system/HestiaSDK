@@ -316,11 +316,75 @@ namespace HestiaCore {
     bool FlushState   = false;
     bool ha_ok       = false;
 
-    void CoreComm() { 
+    // A HA session is scoped to a single MQTT transport session or to a
+    // detected HA restart. Values received before this epoch are not proof
+    // that HA is available now.
+    HAIoTBridge* haOnlineBridge = nullptr;
+    HAIoTBridge* haHeartbeatBridge = nullptr;
+    uint32_t haSessionEpoch = 0;
+    uint32_t haOnlineBaseline = 0;
+    uint32_t haHeartbeatBaseline = 0;
+    uint32_t haConfirmedEpoch = 0;
+    uint32_t haInitEpoch = 0;
+    uint32_t haStatusSubscribedEpoch = 0;
+    bool haSessionPending = false;
 
-        // Cache du bridge HA_online
-        static HAIoTBridge* haOnlineBridge = nullptr;
-        static HAIoTBridge* haHeartbeatBridge = nullptr;
+    void cacheHaBridges() {
+        if (!haOnlineBridge) {
+            haOnlineBridge = HestiaCore::get("IotBridge_HA_online");
+        }
+        if (!haHeartbeatBridge) {
+            haHeartbeatBridge = HestiaCore::get("IotBridge_HA_heartbeat");
+        }
+    }
+
+    void beginHaSession(const char* reason) {
+        cacheHaBridges();
+        ++haSessionEpoch;
+        if (haSessionEpoch == 0) ++haSessionEpoch;
+
+        FlushState = false;
+        Tempo::oneShot("MQTT_FLUSH_TIMER"_id).cancel();
+        Tempo::oneShot("HA_HB_TIMER"_id).cancel();
+        ha_ok = false;
+        haConfirmedEpoch = 0;
+        haInitEpoch = 0;
+        haStatusSubscribedEpoch = 0;
+        haSessionPending = false;
+
+        // Do not retain HA status or heartbeat evidence from an earlier epoch.
+        if (haOnlineBridge) {
+            haOnlineBridge->resetRuntimeValue();
+            haOnlineBaseline = haOnlineBridge->inboundSequence();
+        }
+        if (haHeartbeatBridge) {
+            haHeartbeatBridge->resetRuntimeValue();
+            haHeartbeatBaseline = haHeartbeatBridge->inboundSequence();
+        }
+
+        Serial.printf("[CoreComm] HA session %lu started: %s\n",
+                      static_cast<unsigned long>(haSessionEpoch), reason);
+    }
+
+    void abortHaSession(const char* reason) {
+        if (!haSessionPending && !FlushState && haConfirmedEpoch == 0 &&
+            haInitEpoch == 0 && haStatusSubscribedEpoch == 0) return;
+        FlushState = false;
+        Tempo::oneShot("MQTT_FLUSH_TIMER"_id).cancel();
+        Tempo::oneShot("HA_HB_TIMER"_id).cancel();
+        ha_ok = false;
+        haConfirmedEpoch = 0;
+        haInitEpoch = 0;
+        haStatusSubscribedEpoch = 0;
+        haSessionPending = false;
+        if (haOnlineBridge) haOnlineBridge->resetRuntimeValue();
+        if (haHeartbeatBridge) haHeartbeatBridge->resetRuntimeValue();
+        Serial.printf("[CoreComm] HA session %lu aborted: %s\n",
+                      static_cast<unsigned long>(haSessionEpoch), reason);
+    }
+
+    void CoreComm() {
+        cacheHaBridges();
         // Cache heartbeat timeout value
         static uint32_t haHbTimeout =
                  HestiaConfig::getParamObj("ha_heartbeat_timeout_ms")->readInt();
@@ -337,6 +401,7 @@ namespace HestiaCore {
             coreState = CommState::WIFI_READY;
         }
         else if (!wifiOK) {
+            abortHaSession("Wi-Fi disconnected");
             coreState = CommState::WIFI_NOT_READY;
         }
     
@@ -348,24 +413,16 @@ namespace HestiaCore {
             bool mqttOK = HestiaNet::tryMQTTConnectNonBlocking();
 
             if (mqttOK && coreState == CommState::WIFI_READY) {
-            Serial.println("[HestiaCore::CoreComm] 🌐 New MQTT session ");
-            Serial.flush();
-            coreState = CommState::MQTT_READY;
+                beginHaSession("MQTT connected");
+                Serial.println("[HestiaCore::CoreComm] 🌐 New MQTT session ");
+                Serial.flush();
+                coreState = CommState::MQTT_READY;
             }
             if (!mqttOK) {
+                abortHaSession("MQTT disconnected");
                 coreState = CommState::WIFI_READY;
             }
         }
-
-        // -------------------------------------------------------------------------
-        // Load HA_online bridge once
-        // -------------------------------------------------------------------------
-        if (!haOnlineBridge) {
-            haOnlineBridge = HestiaCore::get("IotBridge_HA_online");
-        }
-        if (!haHeartbeatBridge) {
-            haHeartbeatBridge = HestiaCore::get("IotBridge_HA_heartbeat");
-        }   
 
         switch (coreState) {
 
@@ -382,14 +439,20 @@ namespace HestiaCore {
                 String topic = "";
                 if (haOnlineBridge)
                     topic = haOnlineBridge->topicFrom();
-                if (topic.length() > 0){
+                if (topic.length() > 0 && haStatusSubscribedEpoch != haSessionEpoch){
                     client.subscribe(topic.c_str());
+                    haStatusSubscribedEpoch = haSessionEpoch;
                 } else {
-                    Serial.println(F("[CoreComm] WARNING: HA_online bridge not found or has no topic."));
+                    if (topic.length() == 0) {
+                        Serial.println(F("[CoreComm] WARNING: HA_online bridge not found or has no topic."));
+                    }
                 }
-                ha_ok = haOnlineBridge && haOnlineBridge->readBool();
+                ha_ok = haOnlineBridge &&
+                        haOnlineBridge->inboundSequence() > haOnlineBaseline &&
+                        haOnlineBridge->readBool();
                 if (ha_ok) {
                     Serial.println(F("[CoreComm] HA_online detected → proceeding"));
+                    haConfirmedEpoch = haSessionEpoch;
                     coreState  = CommState::HA_ONLINE_CONFIRM;
                 } else {
                     coreState = CommState::HA_ONLINE_WAIT;
@@ -458,12 +521,15 @@ namespace HestiaCore {
                 FlushState   = false;
                 Serial.println(F("[HestiaCore::CoreComm | MQTT] 🔭 Retained message flush complete."));
                 Serial.flush();
-                ha_ok = haOnlineBridge && haOnlineBridge->readBool();
+                ha_ok = haOnlineBridge &&
+                        haOnlineBridge->inboundSequence() > haOnlineBaseline &&
+                        haOnlineBridge->readBool();
                 if (!ha_ok) {
                     Serial.println(F("[HestiaCore::CoreComm | HA] ✅ HA is offline."));
                     coreState = CommState::HA_ONLINE_WAIT;
                 }
                 else {
+                    haSessionPending = true;
                     coreState = CommState::HA_NEWSEQCOM;
                 }
                 break;
@@ -471,9 +537,8 @@ namespace HestiaCore {
 
             // =====================  HAInit  =====================
             case CommState::HA_NEWSEQCOM:
-                Serial.println(F("[HestiaCore::CoreComm | HAInit ] ✅ New sequence communication started."));
-                Serial.flush();
-                coreState = CommState::HA_INIT_WAIT;
+                // Wait for newSeqComm(). The application owns the transition
+                // into HA_INIT_WAIT and can therefore never miss this session.
                 break;
         
             case CommState::HA_INIT_WAIT:
@@ -493,26 +558,31 @@ namespace HestiaCore {
             }
             case CommState::SYSTEM_RUNNING:
             {
-                ha_ok = haOnlineBridge && haOnlineBridge->readBool();
+                ha_ok = haOnlineBridge &&
+                        haOnlineBridge->inboundSequence() > haOnlineBaseline &&
+                        haOnlineBridge->readBool();
 
                 // 1) Si HA_online = false → retour HA_ONLINE_WAIT
                 if (!ha_ok) {
                         Serial.println(F("[CoreComm] HA offline detected → entering HA_ONLINE_WAIT"));
+                        beginHaSession("HA_online lost");
                         coreState = CommState::HA_ONLINE_WAIT;
+                        break;
                 }
 
                 // 2) Heartbeat HA → ESP
 
-                bool hbChanged = haHeartbeatBridge && haHeartbeatBridge->onChange();
+                const bool hbReceived = haHeartbeatBridge &&
+                                        haHeartbeatBridge->inboundSequence() > haHeartbeatBaseline;
                 //String hb = haHeartbeatBridge->read();
                 //Serial.println(hb);
-                if (hbChanged) {
-
-                     Tempo::oneShot("HA_HB_TIMER"_id).start(haHbTimeout); // reset watchdog
-                    //Serial.println(F("[CoreComm] HA heartbeat received → watchdog reset"));
+                if (hbReceived) {
+                     haHeartbeatBaseline = haHeartbeatBridge->inboundSequence();
+                     Tempo::oneShot("HA_HB_TIMER"_id).start(haHbTimeout);
                 }
                 else if (Tempo::oneShot("HA_HB_TIMER"_id).done()) {
                     Serial.println(F("[CoreComm] WARNING: HA heartbeat timeout"));
+                    beginHaSession("HA heartbeat timeout");
                     coreState = CommState::HA_ONLINE_WAIT;
                     break;
                 }
@@ -536,10 +606,8 @@ namespace HestiaCore {
     //  Communication State Helpers
     // =====================================================================================
     bool commOK() {
-        if (coreState >= CommState::HA_ONLINE_CONFIRM) {
-            return true;
-        }
-        return false;
+        return client.connected() && haConfirmedEpoch == haSessionEpoch &&
+               haSessionEpoch != 0 && coreState >= CommState::HA_ONLINE_CONFIRM;
     }
 
     /**
@@ -548,8 +616,12 @@ namespace HestiaCore {
      * Returns true once per full communication session (epoch).
      */
     bool newSeqComm() {
-        if (coreState == CommState::HA_NEWSEQCOM) {
+        if (coreState == CommState::HA_NEWSEQCOM && haSessionPending) {
+            haSessionPending = false;
+            haInitEpoch = haSessionEpoch;
             coreState = CommState::HA_INIT_WAIT;
+            Serial.printf("[HestiaCore::CoreComm | HAInit] Session %lu handed to application.\n",
+                          static_cast<unsigned long>(haSessionEpoch));
             return true;
         }
         return false;
@@ -559,11 +631,13 @@ namespace HestiaCore {
     //  HAInitDone setter — called from main after HAInit()
     // =====================================================================================
     void setHAInitDone() {
-        if (coreState == CommState::HA_INIT_WAIT) {
+        if (coreState == CommState::HA_INIT_WAIT &&
+            haInitEpoch == haSessionEpoch && client.connected() && commOK()) {
             coreState = CommState::HA_INIT_DONE;
             return;
         }
-        return;
+        Serial.printf("[HestiaCore::CoreComm | HAInit] Ignored completion for session %lu.\n",
+                      static_cast<unsigned long>(haInitEpoch));
     }
 
     /**

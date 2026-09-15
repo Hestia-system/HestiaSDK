@@ -241,9 +241,22 @@ uint8_t decimals() const;
 
 /**
  * @brief Enable or disable logging for outgoing publish operations.
+ * Logging is disabled by default for every bridge. Enable it explicitly
+ * with setLogWrites(true) on the entities to trace.
  * @param enable True → log writes ; False → silent mode.
  */
 void setLogWrites(bool enable);
+
+/**
+ * @brief Restore the in-RAM default without publishing or writing NVS.
+ *
+ * Used by the communication layer to discard presence/heartbeat values from
+ * a previous MQTT session. It must not be used to restore application state.
+ */
+void resetRuntimeValue();
+
+/** @brief Number of MQTT messages accepted by this bridge since boot. */
+uint32_t inboundSequence() const;
 
 
 private:
@@ -268,7 +281,8 @@ private:
   String   _valueMem;      // Last published / acknowledged value
 
   bool     _initialized;   // Set once init() completes
-  bool     _logWrites = true; // Enable/disable publish logging
+  bool     _logWrites = false; // Publish logging is opt-in per bridge
+  uint32_t _inboundSequence = 0; // Monotonic accepted MQTT-message counter
 
 
   // ========================================================================
